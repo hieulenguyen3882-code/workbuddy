@@ -25,11 +25,22 @@ NOISE_PATTERNS = [
 ]
 
 # 需求/购买信号关键词（粗筛用，不下最终结论）
+# 必须包含明确的请求/疑问意味，避免自我反思类评论误判
 DEMAND_KEYWORDS = [
+    # 明确求教程/方案/链接
     "怎么买", "多少钱", "哪里买", "求链接", "求教程", "求方案",
-    "怎么做", "怎么弄", "能不能教", "我也想", "我也有", "我也遇到",
-    "求推荐", "好用吗", "效果怎么样", "有用吗", "靠谱吗",
-    "在哪买", "有链接吗", "怎么联系", "求带", "求带飞",
+    "怎么做", "怎么弄", "能不能教", "求推荐", "求带", "求带飞",
+    "教程发", "发教程", "咋做", "咋弄", "咋整", "怎么学",
+    "学到什么", "能学到", "避险", "怎么办", "怎么破",
+    # 明确表达想学/不会（需配合疑问语境）
+    "我也想", "我也遇到", "不晓得怎么", "不知道怎么", "不会呀", "不懂怎么",
+    # 问效果/质量
+    "好用吗", "效果怎么样", "有用吗", "靠谱吗", "有链接吗", "怎么联系",
+]
+
+# 作者评论过滤模式（作者自评/回复不算作用户反馈）
+AUTHOR_PATTERNS = [
+    r"作者.*回复", r"作者\.\.\.", r"^作者",
 ]
 
 # 质疑/反驳信号
@@ -71,17 +82,29 @@ def classify(comment: str) -> str:
     return "other"
 
 
+def is_author_comment(comment: str) -> bool:
+    """判断是否为作者自评/回复（不算作用户反馈）。"""
+    for p in AUTHOR_PATTERNS:
+        if re.search(p, comment):
+            return True
+    return False
+
+
 def process(comments: List[str]) -> Dict:
-    """处理评论列表：去噪、粗分、返回高价值评论。"""
+    """处理评论列表：去噪、过滤作者评论、粗分、返回高价值评论。"""
     result = {
         "total": len(comments),
         "noise_count": 0,
+        "author_count": 0,
         "high_value": [],
         "by_type": {"demand": [], "question": [], "feedback": [], "other": []},
     }
     for c in comments:
         if is_noise(c):
             result["noise_count"] += 1
+            continue
+        if is_author_comment(c):
+            result["author_count"] += 1
             continue
         t = classify(c)
         result["by_type"][t].append(c)

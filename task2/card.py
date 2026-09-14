@@ -1,72 +1,64 @@
 """
-快速判断卡格式输出。
-只输出模板和证据，判断由模型完成。
+快速判断卡格式输出（自动判断版）。
+接收 judgment 字典，输出完整卡片，无 [待判断] 占位。
 """
 
 CARD_TEMPLATE = """━━━━━━━━━━━━━━━━━━
-快速判断卡
+快速判断卡（自动生成）
 ━━━━━━━━━━━━━━━━━━
 【素材】
 作者：{author}
 发布时间：{publish_time}
 链接：{url}
 当前数据：点赞 {like} / 评论 {comment} / 收藏 {collect} / 分享 {share}
+收藏/点赞比：{cl_ratio}
 
 【它在讲什么】
-一句话：{caption_summary}
+一句话：{what}
 
 【为什么有人看】
-核心触发点：[待判断]
-证据：{trigger_evidence}
+核心触发点：{why_trigger}
+证据：{why_evidence}
 
 【评论区真实反馈】
-{comments_section}
+{comments_summary}
 
 【我能拿走什么】
-主价值：[待判断]
-次价值：[待判断]
-可迁移点：[待判断]
+主价值：{main_value}
+次价值：{sub_value}
+可迁移点：{transferable}
 
 【风险 / 反证】
 {risk}
 
 【判断】
-[待判断：继续深拆 / 市场反馈雷达 / 素材库 / 选题池 / 观察 / 丢弃 / 证据不足]
+{verdict}
 
 【一句话理由】
-[待判断，不超过40字]
+{reason}
 ━━━━━━━━━━━━━━━━━━"""
 
 
-def build_card(data: dict, validation: dict, comment_result: dict) -> str:
-    """构建快速判断卡模板（证据已填充，判断待模型完成）。"""
+def build_card(data: dict, validation: dict, comment_result: dict,
+               judgment: dict, engagement: dict) -> str:
+    """构建完整快速判断卡。"""
     fields = data.get("fields", {})
     stats = fields.get("stats", {})
-    caption = fields.get("caption", "")
-    caption_summary = caption[:80] + "..." if len(caption) > 80 else caption
 
-    # 评论区部分
-    high_value = comment_result.get("high_value", [])
-    if high_value:
-        lines = []
-        for i, c in enumerate(high_value[:5], 1):
-            t = c["type"]
-            type_label = {"demand": "需求", "question": "质疑", "feedback": "反馈"}.get(t, t)
-            text = c["text"][:100]
-            lines.append(f"{i}. [{type_label}] {text}")
-        comments_section = "\n".join(lines)
-    elif comment_result.get("total", 0) > 0:
-        comments_section = "【未发现足够高价值评论】"
-    else:
-        comments_section = "【当前仅基于已加载评论判断】"
+    # 证据不足时的特殊处理
+    if judgment["verdict"] == "证据不足":
+        judgment["what"] = judgment.get("what", "正文信息不足")
+        judgment["why_trigger"] = "证据不足，无法判断"
+        judgment["why_evidence"] = f"缺失字段: {validation.get('missing_fields', [])}，评论数: {validation.get('comment_count', 0)}"
+        judgment["comments_summary"] = "当前抓取评论无有效正文，无法用评论证明价值。"
+        judgment["main_value"] = "暂无明显价值"
+        judgment["sub_value"] = "无"
+        judgment["transferable"] = "无"
+        judgment["risk"] = "证据不足"
+        judgment["reason"] = "证据不足，无法判断"
 
-    # 风险/反证
-    questions = comment_result.get("by_type", {}).get("question", [])
-    risk = questions[0][:100] if questions else "暂无明显反证"
-
-    # 证据不足提示
-    if not validation.get("can_judge", False):
-        risk = f"证据不足：缺失 {validation.get('missing_fields', [])}，评论数 {validation.get('comment_count', 0)}"
+    cl_ratio = engagement.get("collect_like_ratio", 0)
+    cl_ratio_str = f"{cl_ratio}（{'收藏 > 点赞' if cl_ratio > 1 else '收藏 < 点赞'}）" if cl_ratio > 0 else "0"
 
     return CARD_TEMPLATE.format(
         author=fields.get("author", "未知"),
@@ -76,8 +68,15 @@ def build_card(data: dict, validation: dict, comment_result: dict) -> str:
         comment=stats.get("commentCount", "未知"),
         collect=stats.get("collectCount", "未知"),
         share=stats.get("shareCount", "未知"),
-        caption_summary=caption_summary,
-        trigger_evidence=f"正文 {len(caption)} 字 / 评论 {comment_result.get('total', 0)} 条 / 高价值 {len(high_value)} 条",
-        comments_section=comments_section,
-        risk=risk,
+        cl_ratio=cl_ratio_str,
+        what=judgment["what"],
+        why_trigger=judgment["why_trigger"],
+        why_evidence=judgment["why_evidence"],
+        comments_summary=judgment["comments_summary"],
+        main_value=judgment["main_value"],
+        sub_value=judgment["sub_value"],
+        transferable=judgment["transferable"],
+        risk=judgment["risk"],
+        verdict=judgment["verdict"],
+        reason=judgment["reason"],
     )
