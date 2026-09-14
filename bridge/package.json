@@ -1,0 +1,10 @@
+{
+  "name": "douyin-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MVP 0 本地桥：接收 Chrome 扩展抓取的结构化抖音事实，落盘供增长判断中枢读取",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
